@@ -437,6 +437,10 @@ const App = (() => {
               ${customers.map(c => `<option value="${c.id}">${esc(c.name)} (Bal: ${money(c.balance || 0)})</option>`).join("")}
             </select>
           </div>
+          <div class="field">
+            <label>New Customer Name <span class="hint">(enter only if customer is not listed)</span></label>
+            <input id="pay-new-customer" type="text" placeholder="Enter customer name" autocomplete="off">
+          </div>
         </div>
       </div>
       <div class="modal-actions">
@@ -463,7 +467,14 @@ const App = (() => {
       if (payment.type === "CASH") {
         payment.cash_received = Number(cashInput.value) || 0;
       } else {
-        payment.customer_id = Number(document.getElementById("pay-customer").value) || null;
+        const newCustomerName = document.getElementById("pay-new-customer").value.trim();
+        if (newCustomerName) {
+          const saved = await Customers.save({ name: newCustomerName });
+          if (!saved.ok) { toast(saved.message, "error"); return; }
+          payment.customer_id = saved.customer.id;
+        } else {
+          payment.customer_id = Number(document.getElementById("pay-customer").value) || null;
+        }
       }
       const result = await Sales.completeSale(items, payment);
       if (!result.ok) { toast(result.message, "error"); return; }
