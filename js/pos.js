@@ -46,13 +46,37 @@ const Cart = (() => {
     return { ok: true, message: "Added to cart." };
   }
 
+  // Manual items are POS-only: they are saved with the sale but never touch inventory.
+  function addManualItem(productName, unit, qty, price) {
+    const name = (productName || "").trim();
+    qty = Number(qty);
+    price = Number(price);
+    if (!name) return { ok: false, message: "Enter a product name." };
+    if (!unit) return { ok: false, message: "Select a unit." };
+    if (!Number.isFinite(qty) || qty <= 0) return { ok: false, message: "Enter a valid quantity." };
+    if (!Number.isFinite(price) || price < 0) return { ok: false, message: "Enter a valid amount." };
+
+    const productCode = `MANUAL-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+    items.push({
+      product_code: productCode,
+      product_name: name,
+      unit,
+      qty,
+      price,
+      subtotal: qty * price,
+      stock: Infinity,
+      manual_entry: true
+    });
+    return { ok: true, message: "Manual item added to cart." };
+  }
+
   function updateQty(productCode, qty) {
     const item = items.find(i => i.product_code === productCode);
     if (!item) return { ok: false, message: "Item not in cart." };
     if (qty <= 0) {
       return removeItem(productCode);
     }
-    if (qty > item.stock) {
+    if (!item.manual_entry && qty > item.stock) {
       return { ok: false, message: `Only ${item.stock} ${item.unit} available.` };
     }
     item.qty = qty;
@@ -77,5 +101,5 @@ const Cart = (() => {
     return items.reduce((s, i) => s + i.qty, 0);
   }
 
-  return { getItems, addProduct, updateQty, removeItem, clear, total, count, setPricingMode, getPricingMode, priceFor };
+  return { getItems, addProduct, addManualItem, updateQty, removeItem, clear, total, count, setPricingMode, getPricingMode, priceFor };
 })();

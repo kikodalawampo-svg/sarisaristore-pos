@@ -16,6 +16,7 @@ const Sales = (() => {
 
     // validate stock first
     for (const item of cart) {
+      if (item.manual_entry) continue;
       const p = await Products.getProduct(item.product_code);
       if (!p) return { ok: false, message: `Product ${item.product_code} no longer exists.` };
       if (p.qty < item.qty) return { ok: false, message: `Insufficient stock for ${p.product_name}. Available: ${p.qty}.` };
@@ -58,9 +59,12 @@ const Sales = (() => {
         unit: item.unit,
         qty: item.qty,
         price: item.price,
-        subtotal: item.subtotal
+        subtotal: item.subtotal,
+        manual_entry: !!item.manual_entry
       });
-      await Products.adjustStock(item.product_code, -item.qty, { type: "SALE", reference: txnNumber });
+      if (!item.manual_entry) {
+        await Products.adjustStock(item.product_code, -item.qty, { type: "SALE", reference: txnNumber });
+      }
     }
 
     if (payment.type === "UTANG") {

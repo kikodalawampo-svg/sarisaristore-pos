@@ -14,9 +14,11 @@ const Returns = (() => {
     let refundAmount = 0;
     for (const item of items) {
       refundAmount += item.qty * item.price;
-      await Products.adjustStock(item.product_code, item.qty, {
-        type: "RETURN", reference: sale.txn_number, reason: reason || "Sales return"
-      });
+      if (!item.manual_entry) {
+        await Products.adjustStock(item.product_code, item.qty, {
+          type: "RETURN", reference: sale.txn_number, reason: reason || "Sales return"
+        });
+      }
     }
 
     const rec = {

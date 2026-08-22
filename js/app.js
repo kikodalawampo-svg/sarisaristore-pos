@@ -236,6 +236,9 @@ const App = (() => {
             <input id="pos-search" type="text" placeholder="Search Product Code, Name, or Barcode" autocomplete="off">
             <button class="btn btn-ghost" id="pos-scan-btn">Scan</button>
           </div>
+          <div style="margin: 10px 0 14px;">
+            <button class="btn btn-ghost" id="manual-product-open">+ Manually Enter Product</button>
+          </div>
           <div id="pos-results" class="pos-results"></div>
         </div>
         <div class="pos-cart-col">
@@ -255,7 +258,7 @@ const App = (() => {
     const searchInput = document.getElementById("pos-search");
     searchInput.addEventListener("input", async () => {
       const results = await Products.searchProducts(searchInput.value);
-      renderPosResults(results.slice(0, 30));
+      renderPosResults(results.slice(0, 30), searchInput.value);
     });
     searchInput.addEventListener("keydown", async (e) => {
       if (e.key === "Enter") {
@@ -264,6 +267,7 @@ const App = (() => {
         const byBarcode = await Products.findByBarcode(term);
         const p = byCode || byBarcode;
         if (p) { addToCartFlow(p); searchInput.value = ""; document.getElementById("pos-results").innerHTML = ""; }
+        else if (term) { openManualProductModal(term); }
       }
     });
     document.querySelectorAll('input[name="pricing"]').forEach(r => {
@@ -271,8 +275,9 @@ const App = (() => {
     });
     document.getElementById("pos-scan-btn").onclick = () => openScannerModal(async (code) => {
       const p = await Products.findByBarcode(code) || await Products.getProduct(code);
-      if (p) { addToCartFlow(p); } else { toast("No product matches this barcode.", "error"); }
+      if (p) { addToCartFlow(p); } else { openManualProductModal(""); }
     });
+    document.getElementById("manual-product-open").onclick = () => openManualProductModal(searchInput.value);
     document.getElementById("cart-clear").onclick = async () => {
       if (!Cart.getItems().length) return;
       const ok = await confirmDialog("Clear all items from the cart?");
@@ -282,9 +287,13 @@ const App = (() => {
     rerenderCart();
   }
 
-  function renderPosResults(list) {
+  function renderPosResults(list, term = "") {
     const box = document.getElementById("pos-results");
-    if (!list.length) { box.innerHTML = ""; return; }
+    if (!list.length) {
+      box.innerHTML = term.trim() ? `<div class="empty-state small">No product found. <button class="btn btn-ghost" id="manual-product-btn">Manually Enter Product</button></div>` : "";
+      document.getElementById("manual-product-btn")?.addEventListener("click", () => openManualProductModal(term));
+      return;
+    }
     box.innerHTML = list.map(p => `
       <div class="pos-result-row" data-code="${esc(p.product_code)}">
         <div class="pos-result-main">
@@ -308,6 +317,41 @@ const App = (() => {
     rerenderCart();
   }
 
+  function openManualProductModal(defaultName = "") {
+    const units = ["PCS", "PIECE", "SACHET", "BOTTLE", "CAN", "PACK", "BOX", "BUNDLE", "KILO", "GRAM", "LITER", "OTHER"];
+    openModal(`
+      <div class="modal-header"><h3>Manually Enter Product</h3></div>
+      <div class="modal-body">
+        <p class="hint">This is a non-inventory item. It will be included in the sale but will not change product stock.</p>
+        <div class="form-grid">
+          <div class="field"><label>Product Name</label><input id="manual-name" value="${esc(defaultName)}" autocomplete="off"></div>
+          <div class="field"><label>Unit</label><select id="manual-unit">${units.map(unit => `<option value="${unit}">${unit}</option>`).join("")}</select></div>
+          <div class="field"><label>Quantity / Number of Pieces</label><input id="manual-qty" type="number" min="0.001" step="any" value="1"></div>
+          <div class="field"><label>Amount / Selling Price</label><input id="manual-price" type="number" min="0" step="0.01" inputmode="decimal"></div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="manual-cancel">Cancel</button>
+        <button class="btn btn-primary" id="manual-add">Add to Cart</button>
+      </div>`);
+    document.getElementById("manual-cancel").onclick = closeModal;
+    document.getElementById("manual-add").onclick = () => {
+      const result = Cart.addManualItem(
+        document.getElementById("manual-name").value,
+        document.getElementById("manual-unit").value,
+        document.getElementById("manual-qty").value,
+        document.getElementById("manual-price").value
+      );
+      if (!result.ok) { toast(result.message, "error"); return; }
+      closeModal();
+      document.getElementById("pos-search").value = "";
+      document.getElementById("pos-results").innerHTML = "";
+      rerenderCart();
+      toast(result.message, "success");
+    };
+    document.getElementById("manual-name").focus();
+  }
+
   function rerenderCart() {
     const box = document.getElementById("cart-items");
     if (!box) return;
@@ -318,7 +362,7 @@ const App = (() => {
       box.innerHTML = items.map(i => `
         <div class="cart-row" data-code="${esc(i.product_code)}">
           <div class="cart-row-main">
-            <div class="cart-row-name">${esc(i.product_name)}</div>
+            <div class="cart-row-name">${esc(i.product_name)}${i.manual_entry ? " <small>(Manual Entry)</small>" : ""}</div>
             <div class="cart-row-sub">${money(i.price)} &times; <input type="number" min="1" class="qty-input" value="${i.qty}" data-code="${esc(i.product_code)}"> ${esc(i.unit)}</div>
           </div>
           <div class="cart-row-right">
@@ -788,7 +832,7 @@ const App = (() => {
         <p>${fmtDate(sale.date)} &middot; ${esc(sale.payment_type)}</p>
         <table class="data-table">
           <thead><tr><th><input type="checkbox" id="ret-all"></th><th>Item</th><th>Qty</th><th>Price</th><th>Amt</th></tr></thead>
-          <tbody>${items.map(i => `<tr><td><input type="checkbox" class="ret-check" data-id="${i.id}" data-code="${esc(i.product_code)}" data-qty="${i.qty}" data-price="${i.price}"></td><td>${esc(i.product_name)}</td><td>${i.qty} ${esc(i.unit)}</td><td>${money(i.price)}</td><td>${money(i.subtotal)}</td></tr>`).join("")}</tbody>
+          <tbody>${items.map(i => `<tr><td><input type="checkbox" class="ret-check" data-id="${i.id}" data-code="${esc(i.product_code)}" data-qty="${i.qty}" data-price="${i.price}" data-manual="${i.manual_entry ? "1" : "0"}"></td><td>${esc(i.product_name)}${i.manual_entry ? " <small>(Manual Entry)</small>" : ""}</td><td>${i.qty} ${esc(i.unit)}</td><td>${money(i.price)}</td><td>${money(i.subtotal)}</td></tr>`).join("")}</tbody>
         </table>
         <div class="receipt-total-row"><span>TOTAL</span><span>${money(sale.total)}</span></div>
       </div>
@@ -807,7 +851,7 @@ const App = (() => {
       if (!checked.length) { toast("Select at least one item to return.", "error"); return; }
       const ok = await confirmDialog("Process return for the selected item(s)? Stock will be added back.");
       if (!ok) return;
-      const items = checked.map(c => ({ product_code: c.dataset.code, qty: Number(c.dataset.qty), price: Number(c.dataset.price) }));
+      const items = checked.map(c => ({ product_code: c.dataset.code, qty: Number(c.dataset.qty), price: Number(c.dataset.price), manual_entry: c.dataset.manual === "1" }));
       const result = await Returns.processReturn(sale.id, items, "Customer return");
       if (!result.ok) { toast(result.message, "error"); return; }
       toast(result.message, "success");
