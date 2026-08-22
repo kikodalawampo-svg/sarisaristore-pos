@@ -292,6 +292,9 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 @media print {
   body * { visibility: hidden; }
   .receipt, .receipt * { visibility: visible; }
-  .receipt { position: absolute; left: 0; top: 0; width: 100%; }
-  .modal-backdrop, .no-print { display: none !important; }
+  /* The receipt is inside the modal, so keep its parent displayed while printing. */
+  .modal-backdrop { display: block !important; position: static !important; background: transparent !important; }
+  .modal-box { display: block !important; position: static !important; max-width: none !important; box-shadow: none !important; }
+  .receipt { position: static; width: 100%; }
+  .no-print { display: none !important; }
 }
