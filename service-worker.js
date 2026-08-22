@@ -4,7 +4,7 @@
    internet connection after the first successful load/install.
    ============================================================ */
 
-const CACHE_NAME = "kxs-sarisari-pos-v1";
+const CACHE_NAME = "kxs-sarisari-pos-v2";
 const APP_SHELL = [
   "./",
   "./index.html",
